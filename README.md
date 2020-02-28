@@ -1,3 +1,5 @@
+OUTDATED ** Needs to be updated
+
 # AWS-Discord-Bot   <div style="text-align: right">[![codebeat badge](https://codebeat.co/badges/017b9bdd-d5ca-4b4a-a334-ccc6cf8bdb06)](https://codebeat.co/projects/github-com-jamesmatchett-aws-discord-bot-master) </div>
 
 Discord bot used for managing AWS instances including status and toggling on or off via chat commands in a Discord text channel 
