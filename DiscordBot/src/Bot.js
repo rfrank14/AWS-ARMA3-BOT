@@ -8,10 +8,12 @@ const { SECRETKEY } = require('../config.json');
 const { SESSIONTOKEN } = require('../config.json');
 const { INSTANCE } = require('../config.json');
 const { MESSAGELOGGING } = require('../config.json');
+const { SPOTINSTANCE } = require('../config.json');
 var verboseLog = (MESSAGELOGGING === 'T');
 const StartCommand = 'ec2 start-instances --instance-ids ' + INSTANCE;
 const StopCommand = 'ec2 stop-instances --instance-ids ' + INSTANCE;
 const StatusCommand = 'ec2 describe-instances --instance-id ' + INSTANCE;
+const StatusSpotInstance = 'ec2 describe-spot-instance-requests --spot-instance-request-ids ' + SPOTINSTANCE;
 
 let options = new Options(
   /* accessKey    */ ACCESSKEY,
@@ -42,9 +44,11 @@ bot.on('ready', () => {
 
 // starts instance and fires off query wait for instances
 const commandHandlerForCommandName = {};
-commandHandlerForCommandName['start'] = (msg, args) => {
+commandHandlerForCommandName['start'] = async (msg, args) => {
     try {
-        aws.command(StartCommand)
+        state = await returnInstanceState();
+        if (state == "stopped") {
+            aws.command(StartCommand)
             .then(async function (data) {
                 console.warn('data = ', data);
                 msg.channel.createMessage(`Starting the server, i will let you know when its ready`);
@@ -58,27 +62,45 @@ commandHandlerForCommandName['start'] = (msg, args) => {
                     msg.channel.createMessage(`Error starting the server`);
                 }
             });
-
+        } else {
+            message = `Server cannot be started as it is in ${state} state`;
+            msg.channel.createMessage(message);
+        }
+        
     } catch (err) {
         msg.channel.createMessage(`Error starting the server`);
         return msg.channel.createMessage(err);
     }
 };
 
-commandHandlerForCommandName['stop'] = (msg, args) => {
+commandHandlerForCommandName['stop'] = async (msg, args) => {
     try {
-        aws.command(StopCommand)
-            .then(function (data) {
-                console.warn('data = ', data);
-                return msg.channel.createMessage(`Stopping the server, please wait a few minutes before starting again`);
-            })
-            .catch(function (e) {
-                if (verboseLog) {
-                    msg.channel.createMessage(`Error stopping the server,  ${e}`);
-                } else {
-                    msg.channel.createMessage(`Error stopping the server`);
-                }
-            });
+        serverBusy = await playersOnServer();
+        if (!serverBusy) { 
+            aws.command(StopCommand)
+                .then(async function (data) {
+                    console.warn('data = ', data);
+                    msg.channel.createMessage(`Stopping the server`);
+                    stopped = await waitForInstanceStop();
+                    if(stopped) {
+                        msg.channel.createMessage("Server stopped");
+                        return true;
+                    } else {
+                        msg.channel.createMessage(`Stop timeout, server: ${returnInstanceState} spot: ${returnSpotInstanceState}`);
+                        return false;
+                    }
+                })
+                .catch(function (e) {
+                    if (verboseLog) {
+                        msg.channel.createMessage(`Error stopping the server,  ${e}`);
+                    } else {
+                        msg.channel.createMessage(`Error stopping the server`);
+                    }
+                });
+        } else {
+            msg.channel.createMessage('players still on server, cannot stop.');
+            return false;
+        }
 
     } catch (err) {
         msg.channel.createMessage(`Error stopping the server`);
@@ -90,7 +112,7 @@ commandHandlerForCommandName['help'] = (msg, args) => {
     return msg.channel.createMessage(HelpDocs);
 };
 
-// checks if instance is running and proceedes to get status of instance and players in arma server
+// checks if instance is running and$server proceedes to get status of instance and players in arma server
 commandHandlerForCommandName['status'] = (msg, args) => {
     console.warn("Getting server status");
     try {
@@ -229,10 +251,55 @@ async function queryStart() {
     message += '\n```'
     
     return message;
+}
 
-    function sleep(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
+async function getInstanceInfo() {
+    data = await aws.command(StatusCommand)
+    return data.object.Reservations[0].Instances[0];
+}
+
+async function returnInstanceState() {
+    data = await aws.command(StatusCommand)
+    return reply = data.object.Reservations[0].Instances[0].State.Name;
+}
+
+async function returnSpotInstanceState() {
+    data = await aws.command(StatusSpotInstance);
+    return data.object.SpotInstanceRequests[0].State;
+}
+
+async function playersOnServer(){
+    data = await getInstanceInfo();
+    players = queryServer('arma3', data.PublicIpAddress, 'players');
+    return (players.length > 0);
+}
+
+async function waitForInstanceStop() {
+    attempts = 1;
+    state = "";
+    message = "";
+    SPOTINSTANCE == "" ? spotStop = true : spotStop = false;
+    instanceStop = false; 
+      while (attempts <= 40 && (!spotStop || !instanceStop)) {
+        !spotStop && await returnSpotInstanceState() == 'disabled' ? spotStop = true : null;
+        !instanceStop && await returnInstanceState() == 'stopped' ? instanceStop = true : null;
+
+        if (!spotStop || !instanceStop) {
+            await sleep(15000);
+        }
+
+        attempts++
     }
+
+    if (instanceStop && spotStop) {
+        return true; 
+    } else {
+        return false;
+    }
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Every time a message is sent anywhere the bot is present,
@@ -279,7 +346,7 @@ bot.on('messageCreate', async (msg) => {
     // Get the appropriate handler for the command, if there is one.
     const commandHandler = commandHandlerForCommandName[commandName];
     if (!commandHandler) {
-        await msg.channel.createMessage('Unkown command, try `$aws help` for a list of commands');
+        await msg.channel.createMessage(`Unkown command, try ${PREFIX} help for a list of commands`);
         return;
     }
 
