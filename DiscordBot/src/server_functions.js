@@ -9,9 +9,13 @@ const { VOLUMES } = require('../config.json');
 
 async function startServer() {
     try {
+        console.log('Entering start server function')
         mission = await volume_fns.returnLoadedMission();
+        console.log(`mission ${mission} is currently loaded`);
         instanceid = MISSIONS[mission];
+        console.log(`${mission} attached to ${instanceid}`);
         state = await instance_fns.returnInstanceState(instanceid);
+        console.log(`instance ${instanceid} is in ${state} state`)
         if (state == "stopped") {
             instance_fns.startInstance(instanceid);
             message_fns.sendMessage(`Starting the server, i will let you know when its ready`);
@@ -29,13 +33,19 @@ async function startServer() {
 
 async function stopServer() {
     try {
+        console.log('Entering stop server function')
         mission = await volume_fns.returnLoadedMission();
+        console.log(`mission ${mission} is currently loaded`);
         instanceid = MISSIONS[mission];
+        console.log(`${mission} attached to ${instanceid}`);    
         serverBusy = await playersOnServer(instanceid);
         if (!serverBusy) { 
+            console.log(`server has players on it`);
             instance_fns.stopInstance(instanceid);
             message_fns.sendMessage(`Stopping the server`);
+            
             stopped = await waitForServerStop(instanceid);
+            console.log(`server is stopped ${stopped}`);
             if(stopped) {
                 message_fns.sendMessage("Server stopped");
                 return true;
@@ -47,7 +57,7 @@ async function stopServer() {
             message_fns.sendMessage('players still on server, cannot stop.');
             return false;
         }
-
+        console.log('finish stop server');
     } catch (err) {
         message_fns.sendMessage(`Error stopping the server`);
         console.log(err);
@@ -56,7 +66,9 @@ async function stopServer() {
 
 async function changeMission(mission) {
     try {
+        console.log(`Entering change mission function with ${mission} argument`)
         missionInstanceId = MISSIONS[mission];
+        console.log(`${mission} attached to instance ${instanceid}`);
         rootVol = VOLUMES['root'];
         dataVol = VOLUMES['data'];
         volAttachInstance = await volume_fns.returnAttachedInstance(dataVol[1]);
@@ -71,12 +83,13 @@ async function changeMission(mission) {
             console.log(`Disk swap not needed`)
         }
         var scriptPath = `${__dirname}/missions/${mission}.txt`;
+        console.log(`path to mission script: ${scriptPath}`);
         var scriptString = fs.readFileSync(scriptPath, 'utf8');
         scriptBase64 = Buffer.from(scriptString).toString('base64');
 
         await instance_fns.setInstanceUserData(missionInstanceId, scriptBase64);
         await volume_fns.updateMissionTag(dataVol[1], mission);
-        console.log('mission swapped');
+        console.log('finish change mission');
     } catch (e) {
         console.log(e);
         throw e;
@@ -85,39 +98,52 @@ async function changeMission(mission) {
 
 async function missionHelp() {
     try {
+        console.log('start mission help');
         missions = Object.keys(MISSIONS);
         var message = `usage $server mission <mission name> \n List of missions on server: \n`;
         missions.forEach(function(mission) {
             message += `\t ${mission} \n`;
         });
         message_fns.sendMessage(message);
+        console.log('finish missin help');
     } catch (err) {
+        console.log('error in mission help function: ');
         console.log(err);
     }
 }
 
 async function waitForServerStop(instanceid) {
     try {
+        console.log(`start server stop wait with ${instanceid}`);
         attempts = 1;
         state = "";
         message = "";
         spotInstanceid = await instance_fns.returnSpotInstance(instanceid);
+        console.log(`instance ${instanceid} attached to ${spotInstanceid}`);
         spotInstanceid == undefined ? spotStop = true : spotStop = false;
-        instanceStop = false; 
+        instanceStop = false;
+        console.log('starting server stop wait loop');
         while (attempts <= 40 && (!spotStop || !instanceStop)) {
+            console.log(`attempt ${attempts}`);
             !spotStop && await instance_fns.returnSpotInstanceState(spotInstanceid) == 'disabled' ? spotStop = true : null;
+            console.log(`spot request stop ${spotSpot}`);
             !instanceStop && await instance_fns.returnInstanceState(instanceid) == 'stopped' ? instanceStop = true : null;
+            console.log(`instance stop ${spotSpot}`);
 
             if (!spotStop || !instanceStop) {
+                console.log('sleeping for 15 seconds');
                 await sleep(15000);
             }
 
             attempts++
         }
+        console.log('server stop wait loop finished')
 
         if (instanceStop && spotStop) {
+            console.log('server stopped');
             return true; 
         } else {
+            console.log(`server not stopped`);
             return false;
         }
     } catch(err) {
@@ -126,46 +152,58 @@ async function waitForServerStop(instanceid) {
 }
 
 async function serverStatus() {
-    console.warn("Getting server status");
     try {
+        console.log("start server status");
         mission = await volume_fns.returnLoadedMission();
+        console.log(`loaded mission ${mission}`);
         instanceid = MISSIONS[mission];
+        console.log(`${mission} attached to instance ${instanceid}`);
         reply = await instance_fns.returnInstanceData(instanceid);
         instanceState = reply.State.Name;
-        istanceLaunch = reply.LaunchTime;
+        instanceLaunch = reply.LaunchTime;
         ip = reply.PublicIpAddress;
-        var launchTime = new Date(istanceLaunch).toLocaleString("en-US", {timezone: "Australia/Sydney"});
+        var launchTime = new Date(instanceLaunch).toLocaleString("en-US", {timezone: "Australia/Sydney"});
+        console.log(`instance ${instandid} state ${instanceState} public ip ${ip} launch ${launchTime}`);
 
         message = `\`\`\`diff`
         message +=`\nServer Status`
         message += '\n________________________________';
 
         if (instanceState == 'running') {
+            console.log('instance running getting status');
             serverStatus = '+ Server: RUNNING';
             armaStatusP = queryServer('arma3', ip, 'status');
             tsStatusP = queryServer('teamspeak3', ip, 'status');
             playersP = queryServer('arma3', ip, 'players');
+            console.log('await server query')
             let [armaStatus, tsStatus, players] = await Promise.all([armaStatusP, tsStatusP, playersP]);
-
+            console.log("finish await");
             message +=`\n${serverStatus}`;
             message +=`\n${armaStatus}`;
             message +=`\n${tsStatus}`;
             message +=`\n  IP Address : ${ip}`;
             message +=`\n  Launch Time : ${launchTime} \n`
             
+            console.log('starting player status check')
             if(typeof players != 'undefined') {
+                console.log('players on server');
                 message +=`\n  Players: ${players.length}`
                 players.forEach(player => {
+                    console.log(`print player ${player.name}`);
                     message+=`\n\t\t${player.name}`
                 });
+            } else {
+                console.log('no players on server');
             }
 
         } else {
+            console.log('instance not running');
             message += `\n- Server: ${instanceState.toUpperCase()}`;
         }
 
         message += '\n\`\`\`'
         message_fns.sendMessage(message);
+        console.log('finished server status');
         // msg.channel.createMessage(message);
     } catch (err) {
 	console.warn(err);
@@ -175,42 +213,52 @@ async function serverStatus() {
 }
 
 async function queryStart(instanceid) {
+    console.log('start querystart')
     var serverOnline = false;
     var tsOnline = false;
     var a3Online = false;
     var ipAddress;
 
     var attempts = 0;
+    console.log('starting instnace check loop');
     while (attempts < 5 && !serverOnline) {
+        console.log(`attempt ${attempts}`);
         instance = await instance_fns.returnInstanceData(instanceid);
         if (instance.State.Name == "running") {
+            console.log('instance running');
             serverOnline = true;
             ipAddress = instance.PublicIpAddress
         } else {
+            console.log('instance not running');
             console.log("server offline sleeping for 15 seconds");
             await sleep(15000);
         }
         attempts++
     }
-
+    
+    console.log('starting server query');
     attempts = 0;
     while (attempts < 10 && (!a3Online || !tsOnline)) {
+        console.log(`server query attempt ${attempts}`);
         if (!a3Online) {
+            console.log(`a3 server online`);
             reply = await queryServer('arma3', ipAddress, 'status');
             if (reply[0] == '+') {a3Online = true;}
         }
         if(!tsOnline) {
+            console.log('ts3 server online')
             reply = await queryServer('teamspeak3', ipAddress, 'status');
             if (reply[0] == '+') {tsOnline = true;}
         }
 
         if(!tsOnline | !a3Online) {
-            console.log("Instance offline sleeping for 15 seconds");
+            console.log("a3 or ts3 offline sleeping for 15 seconds");
             await sleep(20000);
         }
         attempts++;
     }
 
+    console.log('prepareing status message');
     message = '```diff';
     if(a3Online && tsOnline && serverOnline) {
         message += '\nServer is Ready';
@@ -228,6 +276,7 @@ async function queryStart(instanceid) {
 }
 
 async function queryServer(serverType, ipAddress, queryType) {
+    console.log(`start queryserver function with servertype: ${serverType}, ip: ${ipAddress}, querytype: ${queryType}`);
     var queryInstance = new gamedig();
     let result = queryInstance.query({
         type: serverType,
@@ -245,23 +294,29 @@ async function queryServer(serverType, ipAddress, queryType) {
             return `- ${serverType.toUpperCase()} Instance: OFFLINE`;
         }
     });
+    console.log('finish query server');
     return result;
 }
 
 async function playersOnServer(instanceid){
+    console.log('start players on server');
     data = await instance_fns.returnInstanceData(instanceid);
     players = queryServer('arma3', data.PublicIpAddress, 'players');
+    console.log('finish players on server');
     return (players.length > 0);
 }
 
 async function missionOnServer(incMission) {
+    console.log(`start mission on server with ${incMission}`);
     missionFound = false
     missions = Object.keys(MISSIONS);
     missions.forEach(function(mission) {
         if(mission == incMission) {
+            console.log(`${incMission} found`);
             missionFound = true;
         }
     });
+    console.log(`finish mission on server with ${missionHelp}`);
     return missionFound;
 }
 
