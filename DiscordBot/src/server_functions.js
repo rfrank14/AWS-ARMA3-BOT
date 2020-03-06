@@ -1,13 +1,12 @@
 var instance_fns = require('./instance_functions');
 var volume_fns = require('./volume_functions');
-var message_fns = require('./message_fns');
 var gamedig = require('gamedig');
 var fs = require('fs');
 
 const { MISSIONS }  = require('../config.json');
 const { VOLUMES } = require('../config.json');
 
-async function startServer() {
+async function startServer(msg) {
     try {
         console.log('Entering start server function')
         mission = await volume_fns.returnLoadedMission();
@@ -18,20 +17,20 @@ async function startServer() {
         console.log(`instance ${instanceid} is in ${state} state`)
         if (state == "stopped") {
             instance_fns.startInstance(instanceid);
-            message_fns.sendMessage(`Starting the server, i will let you know when its ready`);
+            msg.channel.createMessage(`Starting the server, i will let you know when its ready`);
             message = await queryStart(instanceid);
-            return message_fns.sendMessage(message);
+            return msg.channel.createMessage(message);
         } else {
             message = `Server cannot be started as it is in ${state} state`;
-            message_fns.sendMessage(message);
+            msg.channel.createMessage(message);
         }
     
     } catch (err) {
-        message_fns.sendMessage(`Error starting the server`);
+        msg.channel.createMessage(`Error starting the server`);
     }
 }
 
-async function stopServer() {
+async function stopServer(msg) {
     try {
         console.log('Entering stop server function')
         mission = await volume_fns.returnLoadedMission();
@@ -42,24 +41,24 @@ async function stopServer() {
         if (!serverBusy) { 
             console.log(`server has players on it`);
             instance_fns.stopInstance(instanceid);
-            message_fns.sendMessage(`Stopping the server`);
+            msg.channel.createMessage(`Stopping the server`);
             
             stopped = await waitForServerStop(instanceid);
             console.log(`server is stopped ${stopped}`);
             if(stopped) {
-                message_fns.sendMessage("Server stopped");
+                msg.channel.createMessage("Server stopped");
                 return true;
             } else {
-                message_fns.sendMessage(`Stop timeout, server: ${returnInstanceState} spot: ${returnSpotInstanceState}`);
+                msg.channel.createMessage(`Stop timeout, server: ${returnInstanceState} spot: ${returnSpotInstanceState}`);
                 return false;
             }
         } else {
-            message_fns.sendMessage('players still on server, cannot stop.');
+            msg.channel.createMessage('players still on server, cannot stop.');
             return false;
         }
         console.log('finish stop server');
     } catch (err) {
-        message_fns.sendMessage(`Error stopping the server`);
+        msg.channel.createMessage(`Error stopping the server`);
         console.log(err);
     }
 }
@@ -96,7 +95,7 @@ async function changeMission(mission) {
     }
 }
 
-async function missionHelp() {
+async function missionHelp(msg) {
     try {
         console.log('start mission help');
         missions = Object.keys(MISSIONS);
@@ -104,7 +103,7 @@ async function missionHelp() {
         missions.forEach(function(mission) {
             message += `\t ${mission} \n`;
         });
-        message_fns.sendMessage(message);
+        msg.channel.createMessage(message);
         console.log('finish missin help');
     } catch (err) {
         console.log('error in mission help function: ');
@@ -126,9 +125,9 @@ async function waitForServerStop(instanceid) {
         while (attempts <= 40 && (!spotStop || !instanceStop)) {
             console.log(`attempt ${attempts}`);
             !spotStop && await instance_fns.returnSpotInstanceState(spotInstanceid) == 'disabled' ? spotStop = true : null;
-            console.log(`spot request stop ${spotSpot}`);
+            console.log(`spot request stop ${spotStop}`);
             !instanceStop && await instance_fns.returnInstanceState(instanceid) == 'stopped' ? instanceStop = true : null;
-            console.log(`instance stop ${spotSpot}`);
+            console.log(`instance stop ${spotStop}`);
 
             if (!spotStop || !instanceStop) {
                 console.log('sleeping for 15 seconds');
@@ -151,7 +150,7 @@ async function waitForServerStop(instanceid) {
     }
 }
 
-async function serverStatus() {
+async function serverStatus(msg) {
     try {
         console.log("start server status");
         mission = await volume_fns.returnLoadedMission();
@@ -163,7 +162,7 @@ async function serverStatus() {
         instanceLaunch = reply.LaunchTime;
         ip = reply.PublicIpAddress;
         var launchTime = new Date(instanceLaunch).toLocaleString("en-US", {timezone: "Australia/Sydney"});
-        console.log(`instance ${instandid} state ${instanceState} public ip ${ip} launch ${launchTime}`);
+        console.log(`instance ${instanceid} state ${instanceState} public ip ${ip} launch ${launchTime}`);
 
         message = `\`\`\`diff`
         message +=`\nServer Status`
@@ -202,13 +201,13 @@ async function serverStatus() {
         }
 
         message += '\n\`\`\`'
-        message_fns.sendMessage(message);
+        msg.channel.createMessage(message);
         console.log('finished server status');
         // msg.channel.createMessage(message);
     } catch (err) {
-	console.warn(err);
-        message_fns.sendMessage(`Error getting status`);
-        return message_fns.sendMessage(err);
+	    console.warn(err);
+        msg.channel.createMessage(`Error getting status`);
+        return msg.channel.createMessage(err);
     }
 }
 
