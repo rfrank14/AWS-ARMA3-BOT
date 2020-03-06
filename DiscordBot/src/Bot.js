@@ -49,7 +49,7 @@ bot.on('ready', () => {
 const commandHandlerForCommandName = {};
 commandHandlerForCommandName['start'] = async (msg, args) => {
     try {
-        server_fns.startServer()
+        server_fns.startServer(msg)
             .then(async function () {
                 console.log('sever finished starting');
          })
@@ -65,7 +65,7 @@ commandHandlerForCommandName['start'] = async (msg, args) => {
 
 commandHandlerForCommandName['stop'] = async (msg, args) => {
     try {
-        server_fns.stopServer(INSTANCE, SPOTINSTANCE)
+        server_fns.stopServer(msg)
             .then(async function () {
                 console.log('server finished stopping');
             })
@@ -87,7 +87,7 @@ commandHandlerForCommandName['help'] = (msg, args) => {
 commandHandlerForCommandName['status'] = (msg, args) => {
     console.warn("Getting server status");
     try {
-        server_fns.serverStatus();
+        server_fns.serverStatus(msg);
     } catch (err) {
 	console.logs(err);
     msg.channel.createMessage(`Error getting status`);
@@ -98,7 +98,7 @@ commandHandlerForCommandName['mission'] = async (msg, args) => {
     try {
         mission = args[1];
         if(mission == undefined) {
-           return await server_fns.missionHelp();
+           return await server_fns.missionHelp(msg);
         }
         await server_fns.changeMission(mission);
         msg.channel.createMessage(`Changed mission to ${mission}`);
