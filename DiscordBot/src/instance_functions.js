@@ -1,6 +1,4 @@
 var awsCli = require('aws-cli-js');
-var message_fns = require('./message_fns');
-var server_fns = require('./server_functions');
 
 var Options = awsCli.Options;
 var Aws = awsCli.Aws;
@@ -42,7 +40,7 @@ async function stopInstance(instanceid) {
 async function restartInstance(msg, args) {
     try {
         if (instanceState = await returnInstanceState() != 'running') {
-            return message_fns.sendMessage(`Cannot restart server as it is ${instanceState}`);
+            return msg.channel.createMessage(`Cannot restart server as it is ${instanceState}`);
         }
         commandHandler = commandHandlerForCommandName['stop']
         restartStopped = commandHandler(msg, 'stop');
